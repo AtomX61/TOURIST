@@ -1,1 +1,121 @@
 
+//@version=5
+strategy("Прототип 2Б", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed, // Изменяем тип количества контрактов на фиксированный
+ default_qty_value=1,             // Устанавливаем количество контрактов на 1 (можно изменить на любое другое число)
+ pyramiding=100,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
+
+// Настройки
+ema_length = input.int(100, "Период EMA", minval=2, step=5)
+limit = input.float(1.7, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Покупка при входе в зону перепроданности", title="Модель", options=["Покупка при входе в зону перепроданности", "Покупка при входе в зону перекупленности"]) == "Покупка при входе в зону перепроданности"
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group ="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group ="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? -1 : 1
+dev_limit = k * dev * limit
+
+// Условия для сигналов
+cond_long = barstate.isconfirmed and bar_in_period and (dno ? ta.crossunder(v, dev_limit) : ta.crossover(v, dev_limit))
+cond_short = barstate.isconfirmed and bar_in_period and (dno ? ta.crossover(v, dev_limit) : ta.crossunder(v, dev_limit))
+
+// Переменные для управления выходом по прибыли
+profit_target = 0.013
+
+// Условия для выхода из сделки
+cond_close_long = barstate.isconfirmed and bar_in_period and close >= strategy.position_avg_price * (1 + profit_target) and strategy.position_size > 0
+cond_close_short = barstate.isconfirmed and bar_in_period and close <= strategy.position_avg_price * (1 - profit_target) and strategy.position_size < 0
+
+// Графики
+sig_col = (dno and v <= dev_limit) or (not dno and v >= dev_limit) ? color.green : color.new(color.blue, 80)
+plot(dev_limit, color=color.green)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_long
+    entry_name_long = "b" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name_long, strategy.long)
+
+if cond_short
+    entry_name_short = "s" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name_short, strategy.short)
+
+// Выход из сделки
+if cond_close_long
+    strategy.close_all("s")
+    
+if cond_close_short
+    strategy.close_all("b")
+
+//@version=5
+strategy("Прототип 2Б", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed, // Изменяем тип количества контрактов на фиксированный
+ default_qty_value=1,             // Устанавливаем количество контрактов на 1 (можно изменить на любое другое число)
+ pyramiding=100,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
+
+// Настройки
+ema_length = input.int(100, "Период EMA", minval=2, step=5)
+limit = input.float(1.7, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Покупка при входе в зону перепроданности", title="Модель", options=["Покупка при входе в зону перепроданности", "Покупка при входе в зону перекупленности"]) == "Покупка при входе в зону перепроданности"
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group ="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group ="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? -1 : 1
+dev_limit = k * dev * limit
+
+// Условия для сигналов
+cond_long = barstate.isconfirmed and bar_in_period and (dno ? ta.crossunder(v, dev_limit) : ta.crossover(v, dev_limit))
+cond_short = barstate.isconfirmed and bar_in_period and (dno ? ta.crossover(v, dev_limit) : ta.crossunder(v, dev_limit))
+
+// Переменные для управления выходом по прибыли
+profit_target = 0.013
+
+// Условия для выхода из сделки
+cond_close_long = barstate.isconfirmed and bar_in_period and close >= strategy.position_avg_price * (1 + profit_target) and strategy.position_size > 0
+cond_close_short = barstate.isconfirmed and bar_in_period and close <= strategy.position_avg_price * (1 - profit_target) and strategy.position_size < 0
+
+// Графики
+sig_col = (dno and v <= dev_limit) or (not dno and v >= dev_limit) ? color.green : color.new(color.blue, 80)
+plot(dev_limit, color=color.green)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_long
+    entry_name_long = "b" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name_long, strategy.long)
+
+if cond_short
+    entry_name_short = "s" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name_short, strategy.short)
+
+// Выход из сделки
+if cond_close_long
+    strategy.close_all("s")
+    
+if cond_close_short
+    strategy.close_all("b")
+
