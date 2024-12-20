@@ -1,1 +1,79 @@
+//@version=5
+strategy("X2", overlay=true, default_qty_type=strategy.fixed, default_qty_value=5000, commission_type=strategy.commission.percent, commission_value=0.06)
 
+// Введение параметров для настройки пивотов
+pivHighLeft = input.int(20, title="Количество баров слева для PivHigh", minval=1)
+pivHighRight = input.int(20, title="Количество баров справа для PivHigh", minval=1)
+pivLowLeft = input.int(20, title="Количество баров слева для PivLow", minval=1)
+pivLowRight = input.int(20, title="Количество баров справа для PivLow", minval=1)
+
+// Параметры для уровней пивотов
+pivHigh = ta.pivothigh(high, pivHighLeft, pivHighRight) // Определение пивота верхнего уровня
+pivLow = ta.pivotlow(low, pivLowLeft, pivLowRight) // Определение пивота нижнего уровня
+
+// Параметры для индикатора RSI
+rsiLength = input.int(14, title="Длина RSI")
+rsiOverbought = input.int(70, title="Уровень перекупленности")
+rsiOversold = input.int(30, title="Уровень перепроданности")
+rsi = ta.rsi(close, rsiLength)
+
+// Условия входа с фильтрацией по RSI
+bool longEntry = not na(pivLow) and close > pivLow and rsi < rsiOversold
+bool shortEntry = not na(pivHigh) and close < pivHigh and rsi > rsiOverbought
+
+// Логирование условий входа
+if longEntry
+    label.new(bar_index, high, "Long Entry", color=color.green, style=label.style_label_down)
+if shortEntry
+    label.new(bar_index, low, "Short Entry", color=color.red, style=label.style_label_up)
+
+// Выполнение стратегии
+if longEntry
+    strategy.entry("Long", strategy.long)
+if shortEntry
+    strategy.entry("Short", strategy.short)
+
+// Параметры для выхода
+takeProfit = input.float(1.5, title="Прибыль в %") / 100
+stopLoss = input.float(0.5, title="Убыток в %") / 100
+
+// Условия выхода с использованием тейк-профита и стоп-лосса
+if longEntry
+    strategy.exit("Take Profit/Stop Loss Long", "Long", limit=close * (1 + takeProfit), stop=close * (1 - stopLoss))
+
+if shortEntry
+    strategy.exit("Take Profit/Stop Loss Short", "Short", limit=close * (1 - takeProfit), stop=close * (1 + stopLoss))
+
+// Визуализация уровней пивотов
+plot(pivHigh, color=color.red, linewidth=2, title="PivHigh")
+plot(pivLow, color=color.green, linewidth=2, title="PivLow")
+
+// Условия выхода
+bool longExit = close < pivLow // Закрытие длинной позиции, если цена ниже пивота
+bool shortExit = close > pivHigh // Закрытие короткой позиции, если цена выше пивота
+
+// Логирование условий выхода
+if longExit
+    label.new(bar_index, low, "Long Exit", color=color.red, style=label.style_label_up)
+if shortExit
+    label.new(bar_index, high, "Short Exit", color=color.green, style=label.style_label_down)
+
+if longExit
+    strategy.close("Long")
+if shortExit
+    strategy.close("Short")
+
+// Добавление трейлинг-стопа
+float trailLongStop = 0.0
+float trailShortStop = 99999.0
+
+if strategy.position_size > 0 // Длинная позиция
+    trailLongStop := math.max(trailLongStop, close * (1 - stopLoss)) // Подтягиваем стоп-лосс вверх
+else if strategy.position_size < 0 // Короткая позиция
+    trailShortStop := math.min(trailShortStop, close * (1 + stopLoss)) // Опускаем стоп-лосс вниз
+
+// Проверка на закрытие позиции по трейлинг-стопу
+if strategy.position_size > 0 and close <= trailLongStop
+    strategy.close("Long")
+if strategy.position_size < 0 and close >= trailShortStop
+    strategy.close("Short")
