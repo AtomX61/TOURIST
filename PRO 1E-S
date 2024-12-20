@@ -1,1 +1,50 @@
+//@version=5
+strategy("Прототип 1E-S", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed, // Изменяем тип количества контрактов на фиксированный
+ default_qty_value=10,             // Устанавливаем количество контрактов на 1 (можно изменить на любое другое число)
+ pyramiding=65,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
 
+// Настройки
+ema_length = input.int(100, "Период EMA", minval=2, step=5)
+limit = input.float(1.7, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Продажа при выходе из зоны перепроданности", title="Модель", options=["Продажа при выходе из зоны перепроданности", "Продажа при выходе из зоны перекупленности"]) == "Продажа при выходе из зоны перепроданности"
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group ="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group ="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? 1 : -1
+dev_limit = k * dev * limit
+
+// Условия для сигналов
+cond_short = barstate.isconfirmed and bar_in_period and (dno ? ta.crossover(v, dev_limit) : ta.crossunder(v, dev_limit))
+
+// Переменные для управления выходом по прибыли
+profit_target = 0.009
+
+// Условия для выхода из сделки
+cond_close = barstate.isconfirmed and bar_in_period and close <= strategy.position_avg_price * (1 - profit_target) and strategy.position_size < 0
+
+// Графики
+sig_col = (dno and v >= dev_limit) or (not dno and v <= dev_limit) ? color.red : color.new(color.blue, 80)
+plot(dev_limit, color=color.red)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_short
+    entry_name = "s" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name, strategy.short)
+
+// Выход из сделки
+if cond_close
+    strategy.close_all("c")
