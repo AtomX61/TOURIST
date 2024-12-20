@@ -1,0 +1,45 @@
+//@version=5
+strategy("Прототип 1А", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed, // Изменяем тип количества контрактов на фиксированный
+ default_qty_value=1,             // Устанавливаем количество контрактов на 1 (можно изменить на любое другое число)
+ pyramiding=2000,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
+
+// Настройки
+ema_length = input.int(80, "Период EMA", minval=2, step=5)
+limit = input.float(3.0, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Покупка при входе в зону перепроданности", title="Модель", options=["Покупка при входе в зону перепроданности", "Покупка при входе в зону перекупленности"]) == "Покупка при входе в зону перепроданности"
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group ="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group ="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? -1 : 1
+dev_limit = k * dev * limit
+
+// Условия для сигналов
+cond_long = barstate.isconfirmed and bar_in_period and (dno ? ta.crossunder(v, dev_limit) : ta.crossover(v, dev_limit))
+cond_close = barstate.isconfirmed and bar_in_period and ta.cross(v, 0.055) and strategy.position_size > 0
+
+// Графики
+sig_col = (dno and v <= dev_limit) or (not dno and v >= dev_limit) ? color.green : color.new(color.blue, 80)
+plot(dev_limit, color=color.green)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_long
+    entry_name = "b" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name, strategy.long)
+
+// Выход из сделки
+if cond_close
+    strategy.close_all("s")
