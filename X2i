@@ -1,1 +1,50 @@
+//@version=5
+strategy("X2i", overlay=true, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.06)
 
+// Параметры для уровней пивотов
+pivHighLeft = input.int(19, title="Количество баров слева для PivHigh", minval=1)
+pivHighRight = input.int(23, title="Количество баров справа для PivHigh", minval=1)
+pivLowLeft = input.int(23, title="Количество баров слева для PivLow", minval=1)
+pivLowRight = input.int(17, title="Количество баров справа для PivLow", minval=1)
+
+// Параметры для уровней пивотов
+pivHigh = ta.pivothigh(high, pivHighLeft, pivHighRight)  // Определение пивота верхнего уровня
+pivLow = ta.pivotlow(low, pivLowLeft, pivLowRight)       // Определение пивота нижнего уровня
+
+// Условия входа (упрощенные для диагностики)
+longEntry = not na(pivLow) and close > pivLow
+shortEntry = not na(pivHigh) and close < pivHigh
+
+// Выполнение стратегии
+if longEntry
+    strategy.entry("Long", strategy.long)
+    label.new(bar_index, low, "Long Entry", color=color.green, style=label.style_label_up)
+
+if shortEntry
+    strategy.entry("Short", strategy.short)
+    label.new(bar_index, high, "Short Entry", color=color.red, style=label.style_label_down)
+
+// Условия выхода
+longExit = close < pivLow  // Закрытие длинной позиции, если цена ниже пивота
+shortExit = close > pivHigh // Закрытие короткой позиции, если цена выше пивота
+
+// Логирование условий выхода
+if longExit
+    label.new(bar_index, low, "Long Exit", color=color.red, style=label.style_label_up)
+
+if shortExit
+    label.new(bar_index, high, "Short Exit", color=color.green, style=label.style_label_down)
+
+if longExit
+    strategy.close("Long")
+
+if shortExit
+    strategy.close("Short")
+
+// Визуализация входов
+plotshape(series=longEntry, location=location.belowbar, color=color.green, style=shape.labelup, text="Long")
+plotshape(series=shortEntry, location=location.abovebar, color=color.red, style=shape.labeldown, text="Short")
+
+// Отладка: показываем значения пивотов
+plot(pivHigh, color=color.red, title="PivHigh", linewidth=2)
+plot(pivLow, color=color.green, title="PivLow", linewidth=2)
