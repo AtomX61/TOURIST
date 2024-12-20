@@ -1,1 +1,62 @@
+//@version=5
+strategy("Прототип 1БY", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed, // Изменяем тип количества контрактов на фиксированный
+ default_qty_value=10,             // Устанавливаем количество контрактов на 1 (можно изменить на любое другое число)
+ pyramiding=100,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
 
+// Настройки
+ema_length = input.int(200, "Период EMA", minval=2, step=5)
+limit = input.float(0.1, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Покупка при входе в зону перепроданности", title="Модель", options=["Покупка при входе в зону перепроданности", "Покупка при входе в зону перекупленности"]) == "Покупка при входе в зону перепроданности"
+risk_per_trade = input.float(0.11, "Максимальный риск на сделку (%)", minval=0, step=0.01)
+profit_target = input.float(0.004, "Целевая прибыль (%)", minval=0, step=0.001)
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group ="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group ="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? -1 : 1
+dev_limit = k * dev * limit
+
+// Условия для сигналов
+cond_long = barstate.isconfirmed and bar_in_period and (dno ? ta.crossunder(v, dev_limit) : ta.crossover(v, dev_limit))
+
+// Фильтр тренда
+trend_ma = ta.sma(close, 200)
+is_uptrend = close > trend_ma
+is_downtrend = close < trend_ma
+
+cond_long := cond_long and is_uptrend
+
+// Условия для выхода из сделки
+cond_close = barstate.isconfirmed and bar_in_period and close >= strategy.position_avg_price * (1 + profit_target) and strategy.position_size > 0
+
+// Графики
+sig_col = (dno and v <= dev_limit) or (not dno and v >= dev_limit) ? color.green : color.new(color.blue, 80)
+plot(dev_limit, color=color.green)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_long
+    entry_name = "b" + str.tostring(strategy.opentrades)
+    strategy.entry(entry_name, strategy.long)
+    
+    // Установка стоп-лосс и тейк-профит
+    stop_loss_level = strategy.position_avg_price * (1 - risk_per_trade)
+    take_profit_level = strategy.position_avg_price * (1 + profit_target)
+    
+    strategy.exit("SL/TP", entry_name, stop=stop_loss_level, limit=take_profit_level)
+
+// Выход из сделки
+if cond_close
+    strategy.close_all("s")
