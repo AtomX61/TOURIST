@@ -1,1 +1,55 @@
+//@version=5
+strategy("Прототип 1C", overlay=false, 
+ initial_capital=50,
+ default_qty_type=strategy.fixed,
+ default_qty_value=100,
+ pyramiding=25,
+ commission_type=strategy.commission.percent,
+ commission_value=0.06
+ )
+
+// Настройки
+ema_length = input.int(250, "Период EMA", minval=0, step=5)
+limit = input.float(0.0, "Фактор отклонения", minval=0, step=0.1, maxval=100)
+dno = input.string(defval="Покупка при входе в зону перепроданного", title="Модель", options=["Покупка при входе в зону перепроданного", "Покупка при входе в зону перекупленного"]) == "Покупка при входе в зону перепроданного"
+
+// Период тестирования
+dt_start = input.time(defval=timestamp('01 January 2015 00:00 +0000'), title='Начало', group="Период тестирования")
+dt_end = input.time(defval=timestamp('01 January 2025 00:00 +0000'), title='Конец', group="Период тестирования")
+bar_in_period = time >= dt_start and time <= dt_end
+
+// Расчет показателей
+v = close - ta.ema(close, ema_length)
+dev = ta.stdev(v, ema_length)
+k = dno ? -1 : 1
+dev_limit = k * dev * limit
+
+// Индикатор DMI
+dmi_length = input.int(4, "DMI Length", minval=1, step=1)
+adx_smoothing = input.int(14, "ADX Smoothing", minval=1, step=1)
+[plus_di, minus_di, _] = ta.dmi(dmi_length, adx_smoothing)
+
+// Условия для сигналов
+cond_long = barstate.isconfirmed and bar_in_period and (dno ? ta.crossunder(v, dev_limit) : ta.crossover(v, dev_limit)) and plus_di > minus_di
+
+// Переменные для управления выходом по прибыли
+profit_target = 0.0085
+
+// Условия для выхода из сделки
+cond_close = barstate.isconfirmed and bar_in_period and close >= strategy.position_avg_price * (1 + profit_target) and strategy.position_size > 0
+
+// Графики
+sig_col = (dno and v <= dev_limit) or (not dno and v >= dev_limit) ? color.green : color.new(color.blue, 80)
+plot(dev_limit, color=color.green)
+plot(k * dev, color=color.new(color.blue, 60))
+plot(v, color=sig_col)
+hline(0)
+
+// Вход в сделку
+if cond_long
+    strategy.entry("Long", strategy.long)
+
+// Выход из сделки
+if cond_close
+    strategy.close("Long")
 
