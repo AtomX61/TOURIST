@@ -1,0 +1,31 @@
+//@version=5
+strategy("MTL")
+
+// Настройки
+fastLength = input.int(title="Fast Length", defval=12)
+slowLength = input.int(title="Slow Length", defval=26)
+src = input.source(close, title="Source")
+signalLength = input.int(title="Signal Smoothing", defval=9)
+smaLength = input.int(title="SMA Length", defval=200)
+rsiLength = input.int(title="RSI Length", defval=14)
+bbMult = input.float(title="BB Mult", defval=2.0)
+
+// Индикаторы
+emaFast = ta.ema(src, fastLength)
+emaSlow = ta.ema(src, slowLength)
+[macdLine, signalLine, histLine] = ta.macd(src, fastLength, slowLength, signalLength)
+rsi = ta.rsi(src, rsiLength)
+basis = ta.sma(src, smaLength)
+dev = bbMult * ta.stdev(src, smaLength)
+upperBand = basis + dev
+lowerBand = basis - dev
+
+// Условия для входа и выхода
+longCondition = close > emaFast and close > emaSlow and macdLine >= 0 and rsi > 30
+exitLongCondition = close < lowerBand or close < emaFast
+
+if longCondition
+    strategy.entry("Long", strategy.long)
+
+if exitLongCondition
+    strategy.close("Long")
