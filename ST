@@ -1,0 +1,122 @@
+//@version=5
+strategy('ST', overlay=true)
+
+// random entry condition
+if ta.crossover(ta.sma(close, 14), ta.sma(close, 28))
+    strategy.entry('ST', strategy.long)
+
+
+// exit logic    
+
+percent2points(percent) =>
+    strategy.position_avg_price * percent / 100 / syminfo.mintick
+
+// sl & tp in %%
+sl = percent2points(input(5, title='stop loss %%'))
+tp1 = percent2points(input(5, title='take profit 1 %%'))
+tp2 = percent2points(input(10, title='take profit 2 %%'))
+tp3 = percent2points(input(15, title='take profit 3 %%'))
+activateTrailingOnThirdStep = input(false, title='activate trailing on third stage (tp3 is amount, tp2 is offset level)')
+
+curProfitInPts() =>
+    if strategy.position_size > 0
+        (high - strategy.position_avg_price) / syminfo.mintick
+    else if strategy.position_size < 0
+        (strategy.position_avg_price - low) / syminfo.mintick
+    else
+        0
+
+calcStopLossPrice(OffsetPts) =>
+    if strategy.position_size > 0
+        strategy.position_avg_price - OffsetPts * syminfo.mintick
+    else if strategy.position_size < 0
+        strategy.position_avg_price + OffsetPts * syminfo.mintick
+    else
+        na
+
+calcProfitTrgtPrice(OffsetPts) =>
+    calcStopLossPrice(-OffsetPts)
+
+getCurrentStage() =>
+    var stage = 0
+    if strategy.position_size == 0
+        stage := 0
+        stage
+    if stage == 0 and strategy.position_size != 0
+        stage := 1
+        stage
+    else if stage == 1 and curProfitInPts() >= tp1
+        stage := 2
+        stage
+    else if stage == 2 and curProfitInPts() >= tp2
+        stage := 3
+        stage
+    stage
+
+calcTrailingAmountLevel(points) =>
+    var float level = na
+    level := calcProfitTrgtPrice(points)
+    if not na(level)
+        if strategy.position_size > 0
+            if not na(level[1])
+                level := math.max(level[1], level)
+                level
+            if not na(level)
+                level := math.max(high, level)
+                level
+        else if strategy.position_size < 0
+            if not na(level[1])
+                level := math.min(level[1], level)
+                level
+            if not na(level)
+                level := math.min(low, level)
+                level
+
+calcTrailingOffsetLevel(points, offset) =>
+    float result = na
+    amountLevel = calcTrailingAmountLevel(points)
+    if strategy.position_size > 0
+        trailActiveDiff = amountLevel - calcProfitTrgtPrice(points)
+        if trailActiveDiff > 0
+            result := trailActiveDiff + calcProfitTrgtPrice(offset)
+            result
+    else if strategy.position_size < 0
+        trailActiveDiff = calcProfitTrgtPrice(points) - amountLevel
+        if trailActiveDiff > 0
+            result := calcProfitTrgtPrice(offset) - trailActiveDiff
+            result
+    result
+
+float stopLevel = na
+float trailOffsetLevel = na
+float profitLevel = activateTrailingOnThirdStep ? calcTrailingAmountLevel(tp3) : calcProfitTrgtPrice(tp3)
+
+// note: calcTrailingOffsetLevel uses calcTrailingAmountLevel and last one has a state (level).
+//       therefor we needs calculate it on every bar for correct result.
+//       if we inline it the Pine compiler give us warning "The function '***' should be called on each calculation for consistency. It is recommended to extract the call from this scope."
+trailOffsetLevelTmp = calcTrailingOffsetLevel(tp3, tp2)
+
+// based on current stage set up exit
+// note: we use same exit ids ("x") consciously, for MODIFY the exit's parameters
+curStage = getCurrentStage()
+if curStage == 1
+    stopLevel := calcStopLossPrice(sl)
+    strategy.exit('x', loss=sl, profit=tp3, comment='sl or tp3')
+else if curStage == 2
+    stopLevel := calcStopLossPrice(0)
+    strategy.exit('x', stop=stopLevel, profit=tp3, comment='breakeven or tp3')
+else if curStage == 3
+    stopLevel := calcStopLossPrice(-tp1)
+    if activateTrailingOnThirdStep
+        trailOffsetLevel := trailOffsetLevelTmp
+        strategy.exit('x', stop=stopLevel, trail_points=tp3, trail_offset=tp3 - tp2, comment='stop tp1 or trailing tp3 with offset tp2')
+    else
+        strategy.exit('x', stop=stopLevel, profit=tp3, comment='tp1 or tp3')
+else
+    strategy.cancel('x')
+
+// this is debug plots for visulalize TP & SL levels
+plot(stopLevel, style=plot.style_linebr, color=color.new(color.red, 0))
+plot(profitLevel, style=plot.style_linebr, color=color.new(color.blue, 0))
+plot(trailOffsetLevel, style=plot.style_linebr, color=color.new(color.green, 0))
+
